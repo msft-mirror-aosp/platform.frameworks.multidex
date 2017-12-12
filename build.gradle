@@ -89,16 +89,7 @@ subprojects {
     version = rootProject.multidexVersion
     group = 'com.android.support'
 
-    task release(type: Upload) {
-        configuration = configurations.archives
-        repositories {
-            mavenDeployer {
-                repository(url: uri("$rootProject.supportRepoOut"))
-            }
-        }
-    }
-
-    dist.dependsOn release
+    dist.dependsOn project.tasks.uploadArchives
 
     project.plugins.whenPluginAdded { plugin ->
         if ("com.android.build.gradle.LibraryPlugin".equals(plugin.class.name)) {
