@@ -63,10 +63,10 @@ final class MultiDexExtractor implements Closeable {
      * {@code classes3.dex}, etc.
      */
     private static final String DEX_PREFIX = "classes";
-    private static final String DEX_SUFFIX = ".dex";
+    static final String DEX_SUFFIX = ".dex";
 
     private static final String EXTRACTED_NAME_EXT = ".classes";
-    private static final String EXTRACTED_SUFFIX = ".zip";
+    static final String EXTRACTED_SUFFIX = ".zip";
     private static final int MAX_EXTRACT_ATTEMPTS = 3;
 
     private static final String PREFS_FILE = "multidex.version";
