@@ -114,7 +114,8 @@ public final class MultiDex {
                     new File(applicationInfo.sourceDir),
                     new File(applicationInfo.dataDir),
                     CODE_CACHE_SECONDARY_FOLDER_NAME,
-                    NO_KEY_PREFIX);
+                    NO_KEY_PREFIX,
+                    true);
 
         } catch (Exception e) {
             Log.e(TAG, "MultiDex installation failure", e);
@@ -171,13 +172,15 @@ public final class MultiDex {
                     new File(instrumentationInfo.sourceDir),
                     dataDir,
                     instrumentationPrefix + CODE_CACHE_SECONDARY_FOLDER_NAME,
-                    instrumentationPrefix);
+                    instrumentationPrefix,
+                    false);
 
             doInstallation(targetContext,
                     new File(applicationInfo.sourceDir),
                     dataDir,
                     CODE_CACHE_SECONDARY_FOLDER_NAME,
-                    NO_KEY_PREFIX);
+                    NO_KEY_PREFIX,
+                    false);
         } catch (Exception e) {
             Log.e(TAG, "MultiDex installation failure", e);
             throw new RuntimeException("MultiDex installation failed (" + e.getMessage() + ").");
@@ -192,9 +195,12 @@ public final class MultiDex {
      * @param dataDir data directory to use for code cache simulation.
      * @param secondaryFolderName name of the folder for storing extractions.
      * @param prefsKeyPrefix prefix of all stored preference keys.
+     * @param reinstallOnPatchRecoverableException if set to true, will attempt a clean extraction
+     * if a possibly recoverable exception occurs during classloader patching.
      */
     private static void doInstallation(Context mainContext, File sourceApk, File dataDir,
-            String secondaryFolderName, String prefsKeyPrefix) throws IOException,
+            String secondaryFolderName, String prefsKeyPrefix,
+            boolean reinstallOnPatchRecoverableException) throws IOException,
                 IllegalArgumentException, IllegalAccessException, NoSuchFieldException,
                 InvocationTargetException, NoSuchMethodException {
         synchronized (installedApk) {
@@ -245,9 +251,38 @@ public final class MultiDex {
             }
 
             File dexDir = getDexDir(mainContext, dataDir, secondaryFolderName);
-            List<? extends File> files =
-                    MultiDexExtractor.load(mainContext, sourceApk, dexDir, prefsKeyPrefix, false);
-            installSecondaryDexes(loader, dexDir, files);
+            // MultiDexExtractor is taking the file lock and keeping it until it is closed.
+            // Keep it open during installSecondaryDexes and through forced extraction to ensure no
+            // extraction or optimizing dexopt is running in parallel.
+            MultiDexExtractor extractor = new MultiDexExtractor(sourceApk, dexDir);
+            IOException closeException = null;
+            try {
+                List<? extends File> files =
+                        extractor.load(mainContext, prefsKeyPrefix, false);
+                try {
+                    installSecondaryDexes(loader, dexDir, files);
+                // Some IOException causes may be fixed by a clean extraction.
+                } catch (IOException e) {
+                    if (!reinstallOnPatchRecoverableException) {
+                        throw e;
+                    }
+                    Log.w(TAG, "Failed to install extracted secondary dex files, retrying with "
+                            + "forced extraction", e);
+                    files = extractor.load(mainContext, prefsKeyPrefix, true);
+                    installSecondaryDexes(loader, dexDir, files);
+                }
+            } finally {
+                try {
+                    extractor.close();
+                } catch (IOException e) {
+                    // Delay throw of close exception to ensure we don't override some exception
+                    // thrown during the try block.
+                    closeException = e;
+                }
+            }
+            if (closeException != null) {
+                throw closeException;
+            }
         }
     }
 
@@ -464,7 +499,8 @@ public final class MultiDex {
                 List<? extends File> additionalClassPathEntries,
                 File optimizedDirectory)
                         throws IllegalArgumentException, IllegalAccessException,
-                        NoSuchFieldException, InvocationTargetException, NoSuchMethodException {
+                        NoSuchFieldException, InvocationTargetException, NoSuchMethodException,
+                        IOException {
             /* The patched class loader is expected to be a descendant of
              * dalvik.system.BaseDexClassLoader. We modify its
              * dalvik.system.DexPathList pathList field to append additional DEX
@@ -500,6 +536,10 @@ public final class MultiDex {
                 }
 
                 suppressedExceptionsField.set(dexPathList, dexElementsSuppressedExceptions);
+
+                IOException exception = new IOException("I/O exception during makeDexElement");
+                exception.initCause(suppressedExceptions.get(0));
+                throw exception;
             }
         }
 
