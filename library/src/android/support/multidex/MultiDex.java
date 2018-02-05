@@ -22,9 +22,7 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.util.Log;
-
 import dalvik.system.DexFile;
-
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Array;
@@ -569,10 +567,83 @@ public final class MultiDex {
      */
     private static final class V14 {
 
+        private interface ElementConstructor {
+            Object newInstance(File file, DexFile dex)
+                    throws IllegalArgumentException, InstantiationException,
+                    IllegalAccessException, InvocationTargetException, IOException;
+        }
+
+        /**
+         * Applies for ICS and early JB (initial release and MR1).
+         */
+        private static class ICSElementConstructor implements ElementConstructor {
+            private final Constructor<?> elementConstructor;
+
+            ICSElementConstructor(Class<?> elementClass)
+                    throws SecurityException, NoSuchMethodException {
+                elementConstructor =
+                        elementClass.getConstructor(File.class, ZipFile.class, DexFile.class);
+                elementConstructor.setAccessible(true);
+            }
+
+            @Override
+            public Object newInstance(File file, DexFile dex)
+                    throws IllegalArgumentException, InstantiationException,
+                    IllegalAccessException, InvocationTargetException, IOException {
+                return elementConstructor.newInstance(file, new ZipFile(file), dex);
+            }
+        }
+
+        /**
+         * Applies for some intermediate JB (MR1.1).
+         *
+         * See Change-Id: I1a5b5d03572601707e1fb1fd4424c1ae2fd2217d
+         */
+        private static class JBMR11ElementConstructor implements ElementConstructor {
+            private final Constructor<?> elementConstructor;
+
+            JBMR11ElementConstructor(Class<?> elementClass)
+                    throws SecurityException, NoSuchMethodException {
+                elementConstructor = elementClass
+                        .getConstructor(File.class, File.class, DexFile.class);
+                elementConstructor.setAccessible(true);
+            }
+
+            @Override
+            public Object newInstance(File file, DexFile dex)
+                    throws IllegalArgumentException, InstantiationException,
+                    IllegalAccessException, InvocationTargetException {
+                return elementConstructor.newInstance(file, file, dex);
+            }
+        }
+
+        /**
+         * Applies for latest JB (MR2).
+         *
+         * See Change-Id: Iec4dca2244db9c9c793ac157e258fd61557a7a5d
+         */
+        private static class JBMR2ElementConstructor implements ElementConstructor {
+            private final Constructor<?> elementConstructor;
+
+            JBMR2ElementConstructor(Class<?> elementClass)
+                    throws SecurityException, NoSuchMethodException {
+                elementConstructor = elementClass
+                        .getConstructor(File.class, Boolean.TYPE, File.class, DexFile.class);
+                elementConstructor.setAccessible(true);
+            }
+
+            @Override
+            public Object newInstance(File file, DexFile dex)
+                    throws IllegalArgumentException, InstantiationException,
+                    IllegalAccessException, InvocationTargetException {
+                return elementConstructor.newInstance(file, Boolean.FALSE, file, dex);
+            }
+        }
+
         private static final int EXTRACTED_SUFFIX_LENGTH =
                 MultiDexExtractor.EXTRACTED_SUFFIX.length();
 
-        private final Constructor<?> elementConstructor;
+        private final ElementConstructor elementConstructor;
 
         static void install(ClassLoader loader,
                 List<? extends File> additionalClassPathEntries)
@@ -586,15 +657,30 @@ public final class MultiDex {
              */
             Field pathListField = findField(loader, "pathList");
             Object dexPathList = pathListField.get(loader);
-            expandFieldArray(dexPathList, "dexElements",
-                    new V14().makeDexElements(additionalClassPathEntries));
+            Object[] elements = new V14().makeDexElements(additionalClassPathEntries);
+            try {
+                expandFieldArray(dexPathList, "dexElements", elements);
+            } catch (NoSuchFieldException e) {
+                // dexElements was renamed pathElements for a short period during JB development,
+                // eventually it was renamed back shortly after.
+                Log.w(TAG, "Failed find field 'dexElements' attempting 'pathElements'", e);
+                expandFieldArray(dexPathList, "pathElements", elements);
+            }
         }
 
         private  V14() throws ClassNotFoundException, SecurityException, NoSuchMethodException {
+            ElementConstructor constructor;
             Class<?> elementClass = Class.forName("dalvik.system.DexPathList$Element");
-            elementConstructor =
-                    elementClass.getConstructor(File.class, ZipFile.class, DexFile.class);
-            elementConstructor.setAccessible(true);
+            try {
+                constructor = new ICSElementConstructor(elementClass);
+            } catch (NoSuchMethodException e1) {
+                try {
+                    constructor = new JBMR11ElementConstructor(elementClass);
+                } catch (NoSuchMethodException e2) {
+                    constructor = new JBMR2ElementConstructor(elementClass);
+                }
+            }
+            this.elementConstructor = constructor;
         }
 
         /**
@@ -611,7 +697,6 @@ public final class MultiDex {
                 File file = files.get(i);
                 elements[i] = elementConstructor.newInstance(
                         file,
-                        new ZipFile(file),
                         DexFile.loadDex(file.getPath(), optimizedPathFor(file), 0));
             }
             return elements;
