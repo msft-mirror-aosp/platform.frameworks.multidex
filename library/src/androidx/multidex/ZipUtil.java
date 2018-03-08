@@ -18,7 +18,7 @@
  * ZipConstants from android libcore.
  */
 
-package android.support.multidex;
+package androidx.multidex;
 
 import java.io.File;
 import java.io.IOException;
