@@ -14,9 +14,9 @@
  * limitations under the License.
  */
 
-package android.support.multidex;
+package androidx.multidex;
 
-import android.support.multidex.ZipUtil.CentralDirectory;
+import androidx.multidex.ZipUtil.CentralDirectory;
 
 import org.junit.Assert;
 import org.junit.BeforeClass;
