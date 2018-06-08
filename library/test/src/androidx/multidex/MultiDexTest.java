@@ -14,7 +14,7 @@
  * limitations under the License.
  */
 
-package android.support.multidex;
+package androidx.multidex;
 
 import org.junit.Assert;
 import org.junit.Test;
