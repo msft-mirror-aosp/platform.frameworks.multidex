@@ -38,4 +38,10 @@ java_library_static {
     java_resources: [
         ":android-support-multidex-version",
     ],
+    product_variables: {
+        unbundled_build: {
+            // Don't build the library in unbundled branches.
+            enabled: false,
+        },
+    },
 }
