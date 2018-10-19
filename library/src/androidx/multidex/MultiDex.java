@@ -22,7 +22,9 @@ import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.os.Build;
 import android.util.Log;
+
 import dalvik.system.DexFile;
+
 import java.io.File;
 import java.io.IOException;
 import java.lang.reflect.Array;
@@ -218,28 +220,11 @@ public final class MultiDex {
                         + System.getProperty("java.vm.version") + "\"");
             }
 
-            /* The patched class loader is expected to be a descendant of
-             * dalvik.system.BaseDexClassLoader. We modify its
-             * dalvik.system.DexPathList pathList field to append additional DEX
-             * file entries.
+            /* The patched class loader is expected to be a ClassLoader capable of loading DEX
+             * bytecode. We modify its pathList field to append additional DEX file entries.
              */
-            ClassLoader loader;
-            try {
-                loader = mainContext.getClassLoader();
-            } catch (RuntimeException e) {
-                /* Ignore those exceptions so that we don't break tests relying on Context like
-                 * a android.test.mock.MockContext or a android.content.ContextWrapper with a
-                 * null base Context.
-                 */
-                Log.w(TAG, "Failure while trying to obtain Context class loader. " +
-                        "Must be running in test mode. Skip patching.", e);
-                return;
-            }
+            ClassLoader loader = getDexClassloader(mainContext);
             if (loader == null) {
-                // Note, the context class loader is null when running Robolectric tests.
-                Log.e(TAG,
-                        "Context class loader is null. Must be running in test mode. "
-                        + "Skip patching.");
                 return;
             }
 
@@ -284,6 +269,38 @@ public final class MultiDex {
                 throw closeException;
             }
         }
+    }
+
+    /**
+     * Returns a {@link Classloader} from the {@link Context} that is capable of reading dex
+     * bytecode or null if the Classloader is not dex-capable e.g: when running on a JVM testing
+     * environment such as Robolectric.
+     */
+    private static ClassLoader getDexClassloader(Context context) {
+        ClassLoader loader;
+        try {
+            loader = context.getClassLoader();
+        } catch (RuntimeException e) {
+            /* Ignore those exceptions so that we don't break tests relying on Context like
+             * a android.test.mock.MockContext or a android.content.ContextWrapper with a
+             * null base Context.
+             */
+            Log.w(TAG, "Failure while trying to obtain Context class loader. "
+                    + "Must be running in test mode. Skip patching.", e);
+            return null;
+        }
+
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.ICE_CREAM_SANDWICH) {
+            if (loader instanceof dalvik.system.BaseDexClassLoader) {
+                return loader;
+            }
+        } else if (loader instanceof dalvik.system.DexClassLoader
+                    || loader instanceof dalvik.system.PathClassLoader) {
+            return loader;
+        }
+        Log.e(TAG, "Context class loader is null or not dex-capable. "
+                + "Must be running in test mode. Skip patching.");
+        return null;
     }
 
     private static ApplicationInfo getApplicationInfo(Context context) {
