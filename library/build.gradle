@@ -36,7 +36,7 @@ task makeVersionFile(type:Exec) {
 }
 
 android {
-    compileSdkVersion 4
+    compileSdkVersion gradle.currentSdk
 
     defaultConfig {
         minSdkVersion 4
