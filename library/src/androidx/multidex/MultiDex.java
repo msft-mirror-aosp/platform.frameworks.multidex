@@ -38,8 +38,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.ListIterator;
 import java.util.Set;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
+import java.util.StringTokenizer;
 import java.util.zip.ZipFile;
 
 /**
@@ -334,11 +333,13 @@ public final class MultiDex {
     static boolean isVMMultidexCapable(String versionString) {
         boolean isMultidexCapable = false;
         if (versionString != null) {
-            Matcher matcher = Pattern.compile("(\\d+)\\.(\\d+)(\\.\\d+)?").matcher(versionString);
-            if (matcher.matches()) {
+            StringTokenizer tokenizer = new StringTokenizer(versionString, ".");
+            String majorToken = tokenizer.hasMoreTokens() ? tokenizer.nextToken() : null;
+            String minorToken = tokenizer.hasMoreTokens() ? tokenizer.nextToken() : null;
+            if (majorToken != null && minorToken != null) {
                 try {
-                    int major = Integer.parseInt(matcher.group(1));
-                    int minor = Integer.parseInt(matcher.group(2));
+                    int major = Integer.parseInt(majorToken);
+                    int minor = Integer.parseInt(minorToken);
                     isMultidexCapable = (major > VM_WITH_MULTIDEX_VERSION_MAJOR)
                             || ((major == VM_WITH_MULTIDEX_VERSION_MAJOR)
                                     && (minor >= VM_WITH_MULTIDEX_VERSION_MINOR));
