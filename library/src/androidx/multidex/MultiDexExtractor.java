@@ -20,7 +20,6 @@ import android.content.Context;
 import android.content.SharedPreferences;
 import android.os.Build;
 import android.util.Log;
-
 import java.io.BufferedOutputStream;
 import java.io.Closeable;
 import java.io.File;
@@ -178,11 +177,7 @@ final class MultiDexExtractor implements Closeable {
 
         final String extractedFilePrefix = sourceApk.getName() + EXTRACTED_NAME_EXT;
         SharedPreferences multiDexPreferences = getMultiDexPreferences(context);
-        int totalDexNumber = multiDexPreferences.getInt(prefsKeyPrefix + KEY_DEX_NUMBER, 0);
-        if (totalDexNumber < 1) {
-            // Guard against SharedPreferences corruption
-            throw new IOException("Invalid dex number: " + totalDexNumber);
-        }
+        int totalDexNumber = multiDexPreferences.getInt(prefsKeyPrefix + KEY_DEX_NUMBER, 1);
         final List<ExtractedDex> files = new ArrayList<ExtractedDex>(totalDexNumber - 1);
 
         for (int secondaryNumber = 2; secondaryNumber <= totalDexNumber; secondaryNumber++) {
