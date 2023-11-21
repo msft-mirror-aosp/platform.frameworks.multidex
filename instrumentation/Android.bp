@@ -21,28 +21,11 @@ package {
     default_applicable_licenses: ["frameworks_multidex_license"],
 }
 
-genrule {
-    name: "android-support-multidex-instrumentation-version",
-    // use srcs as dependencies, otherwise, this module won't be re-run
-    // during incremental build.
-    srcs: [
-        "src/**/*.java",
-    ],
-    cmd: "echo \"git.version=`cd frameworks/multidex/instrumentation; git log --format=\"%H\" -n 1 || " +
-         "(echo git hash not available; exit 0)`\" > $(genDir)/android-support-multidex-instrumentation.version.txt",
-    out: [
-        "android-support-multidex-instrumentation.version.txt",
-    ],
-}
-
 java_library_static {
     name: "android-support-multidex-instrumentation",
     sdk_version: "4",
     srcs: [
         "src/**/*.java",
-    ],
-    java_resources: [
-        ":android-support-multidex-instrumentation-version",
     ],
     static_libs: [
         "android-support-multidex",
