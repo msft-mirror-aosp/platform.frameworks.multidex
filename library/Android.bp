@@ -28,10 +28,4 @@ java_library_static {
     srcs: [
         "src/**/*.java",
     ],
-    product_variables: {
-        unbundled_build: {
-            // Don't build the library in unbundled branches.
-            enabled: false,
-        },
-    },
 }
